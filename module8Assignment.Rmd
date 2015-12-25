@@ -1,0 +1,120 @@
+---
+title: "courseraModule8Assignment"
+author: "kaka"
+date: "25 December 2015"
+output: html_document
+---
+
+##Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+##Data 
+
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
+## Methodology
+Referring to principles of cross-validation, the below steps are taken :
+
+1. Use the training set 
+2. Split this training into training/test sets 
+3. Build a model on the training subset 
+4. Evaluate on the test subset 
+5. Repeat and average the estimated errors
+
+
+## Setup data & library
+```{r warning=FALSE}
+# setdefault global options for this document
+if (!("knitr") %in% installed.packages()) install.packages("knitr")
+library("knitr")
+opts_chunk$set(echo=TRUE , warning=FALSE, message=FALSE )
+
+# load library caret
+if (!("e1071") %in% installed.packages())install.packages('e1071', dependencies = TRUE)
+if (!("caret") %in% installed.packages())install.packages('caret', dependencies = TRUE)
+if (!("rpart.plot") %in% installed.packages())install.packages('rpart.plot', dependencies = TRUE)
+
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+
+# setwd 
+setwd("D:/#Coursera Material/R_workingDir/m8") ## Change this to your working directory
+
+# download csv
+if (!file.exists("pml-training.csv")) 
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile="./pml-training.csv")
+
+if (!file.exists("pml-testing.csv")) 
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile ="./pml-testing.csv")
+```
+
+## Set training/test sets 
+```{r}
+trainSet <- read.csv(file = "./pml-training.csv" ,na.strings=c("NA",""))
+testSet <- read.csv(file = "./pml-testing.csv" ,na.strings=c("NA",""))
+```
+
+## Data Processing
+
+```{r}
+dim(trainSet)
+#Train dataset has 160 columns . Let's filter them and only keep the useful columns by removing those NAs, non-numeric variable, near zero variable and variables that less important 
+trainSet <- trainSet[, which(colSums(is.na(trainSet))==0)] # rm NA
+
+trainSet <- as.data.frame(trainSet[,-(1:7)])  # remove irrelevant columms
+
+lastCol <- ncol(trainSet)
+trainSet[,-lastCol] <- data.frame(sapply(trainSet[,-lastCol], as.numeric))
+nzv <- nearZeroVar(trainSet[, -lastCol], saveMetrics=TRUE)
+trainSet <- trainSet[nzv$nzv == FALSE]
+dim(trainSet)
+
+trainSet$classe = factor(trainSet$classe)
+
+# Manipulate testSet
+dim(testSet)
+testSet  <- testSet[, which(colSums(is.na(testSet))==0)] # rm NA
+testSet <- as.data.frame(testSet[,-(1:7)])  # remove irrelevant columms
+testSet <- testSet[nzv$nzv == FALSE]
+dim(testSet)
+
+# Creating partition for cross-validation
+sample <- createDataPartition(trainSet$classe, p=0.75, list = FALSE)
+subTrain <- trainSet[sample,]
+subTest <- trainSet[-sample,]
+```
+
+## Predict Model 1: Decision Tree
+```{r}
+model1 <- rpart(classe ~ ., data=subTrain, method="class")
+prediction1 <- predict(model1, data=subTest, type = "class")
+rpart.plot(model1, main="Classification Tree", extra=102, under=TRUE, faclen=0)
+confusionMatrix(prediction1, subTrain$classe)
+```
+
+## Predict Model 2: Random Forest
+```{r}
+model2 <- randomForest(classe ~. , data=subTrain, method="class")
+prediction2 <- predict(model2, subTest, type = "class")
+confusionMatrix(prediction2, subTest$classe)
+```
+
+## Model chosing
+As we compare result above, Random Forest do has better accuracy. 
+Hence,  we would use model2 to predecit classe of testSet.
+
+```{r}
+finalPred <- predict(model2, testSet, type="class")
+finalPred
+```
